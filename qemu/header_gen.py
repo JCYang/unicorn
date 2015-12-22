@@ -2835,6 +2835,7 @@ symbols = (
     'tcg_current_code_size',
     'tcg_dump_info',
     'tcg_dump_ops',
+    'tcg_dump_ops_f',
     'tcg_exec_all',
     'tcg_find_helper',
     'tcg_func_start',

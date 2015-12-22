@@ -2829,6 +2829,7 @@
 #define tcg_current_code_size tcg_current_code_size_mips
 #define tcg_dump_info tcg_dump_info_mips
 #define tcg_dump_ops tcg_dump_ops_mips
+#define tcg_dump_ops_f tcg_dump_ops_f_mips
 #define tcg_exec_all tcg_exec_all_mips
 #define tcg_find_helper tcg_find_helper_mips
 #define tcg_func_start tcg_func_start_mips

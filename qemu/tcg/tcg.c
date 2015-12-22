@@ -1261,6 +1261,135 @@ void tcg_dump_ops(TCGContext *s)
     printf("###########\n");
 }
 
+void tcg_dump_ops_f(TCGContext *s, FILE* ops_log)
+{
+    const uint16_t *opc_ptr;
+    const TCGArg *args;
+    TCGArg arg;
+    TCGOpcode c;
+    int i, k, nb_oargs, nb_iargs, nb_cargs, first_insn;
+    const TCGOpDef *def;
+    char buf[128];
+
+    first_insn = 1;
+    opc_ptr = s->gen_opc_buf;
+    args = s->gen_opparam_buf;
+    while (opc_ptr < s->gen_opc_ptr) {
+        c = *opc_ptr++;
+        def = &s->tcg_op_defs[c];
+        if (c == INDEX_op_debug_insn_start) {
+            uint64_t pc;
+#if TARGET_LONG_BITS > TCG_TARGET_REG_BITS
+            pc = ((uint64_t)args[1] << 32) | args[0];
+#else
+            pc = args[0];
+#endif
+            if (!first_insn) {
+                fprintf(ops_log, "\n");
+            }
+            fprintf(ops_log, " ---- 0x%" PRIx64, pc);
+            first_insn = 0;
+            nb_oargs = def->nb_oargs;
+            nb_iargs = def->nb_iargs;
+            nb_cargs = def->nb_cargs;
+        } else if (c == INDEX_op_call) {
+            TCGArg arg;
+
+            /* variable number of arguments */
+            arg = *args++;
+            nb_oargs = arg >> 16;
+            nb_iargs = arg & 0xffff;
+            nb_cargs = def->nb_cargs;
+
+            /* function name, flags, out args */
+            fprintf(ops_log, " %s %s,$0x%" TCG_PRIlx ",$%d", def->name,
+                     tcg_find_helper(s, args[nb_oargs + nb_iargs]),
+                     args[nb_oargs + nb_iargs + 1], nb_oargs);
+            for (i = 0; i < nb_oargs; i++) {
+                fprintf(ops_log, ",%s", tcg_get_arg_str_idx(s, buf, sizeof(buf),
+                                                   args[i]));
+            }
+            for (i = 0; i < nb_iargs; i++) {
+                TCGArg arg = args[nb_oargs + i];
+                const char *t = "<dummy>";
+                if (arg != TCG_CALL_DUMMY_ARG) {
+                    t = tcg_get_arg_str_idx(s, buf, sizeof(buf), arg);
+                }
+                fprintf(ops_log, ",%s", t);
+            }
+        } else {
+            fprintf(ops_log, " %s ", def->name);
+            if (c == INDEX_op_nopn) {
+                /* variable number of arguments */
+                nb_cargs = *args;
+                nb_oargs = 0;
+                nb_iargs = 0;
+            } else {
+                nb_oargs = def->nb_oargs;
+                nb_iargs = def->nb_iargs;
+                nb_cargs = def->nb_cargs;
+            }
+
+            k = 0;
+            for(i = 0; i < nb_oargs; i++) {
+                if (k != 0) {
+                    fprintf(ops_log, ",");
+                }
+                fprintf(ops_log, "%s", tcg_get_arg_str_idx(s, buf, sizeof(buf),
+                                                   args[k++]));
+            }
+            for(i = 0; i < nb_iargs; i++) {
+                if (k != 0) {
+                    fprintf(ops_log, ",");
+                }
+                fprintf(ops_log, "%s", tcg_get_arg_str_idx(s, buf, sizeof(buf),
+                                                   args[k++]));
+            }
+            switch (c) {
+            case INDEX_op_brcond_i32:
+            case INDEX_op_setcond_i32:
+            case INDEX_op_movcond_i32:
+            case INDEX_op_brcond2_i32:
+            case INDEX_op_setcond2_i32:
+            case INDEX_op_brcond_i64:
+            case INDEX_op_setcond_i64:
+            case INDEX_op_movcond_i64:
+                if (args[k] < ARRAY_SIZE(cond_name) && cond_name[args[k]]) {
+                    fprintf(ops_log, ",%s", cond_name[args[k++]]);
+                } else {
+                    fprintf(ops_log, ",$0x%" TCG_PRIlx, args[k++]);
+                }
+                i = 1;
+                break;
+            case INDEX_op_qemu_ld_i32:
+            case INDEX_op_qemu_st_i32:
+            case INDEX_op_qemu_ld_i64:
+            case INDEX_op_qemu_st_i64:
+                if (args[k] < ARRAY_SIZE(ldst_name) && ldst_name[args[k]]) {
+                    fprintf(ops_log, ",%s", ldst_name[args[k++]]);
+                } else {
+                    fprintf(ops_log, ",$0x%" TCG_PRIlx, args[k++]);
+                }
+                i = 1;
+                break;
+            default:
+                i = 0;
+                break;
+            }
+            for(; i < nb_cargs; i++) {
+                if (k != 0) {
+                    fprintf(ops_log, ",");
+                }
+                arg = args[k++];
+                fprintf(ops_log, "$0x%" TCG_PRIlx, arg);
+            }
+        }
+        fprintf(ops_log, "\n");
+        args += nb_iargs + nb_oargs + nb_cargs;
+    }
+    fprintf(ops_log, "###########\n");
+}
+
 /* we give more priority to constraints with less registers */
 static int get_constraint_priority(const TCGOpDef *def, int k)
 {
@@ -2472,6 +2601,10 @@ static inline int tcg_gen_code_common(TCGContext *s,
     s->la_time -= profile_getclock();
 #endif
 
+    static FILE* ops_log = NULL;
+    if (!ops_log)
+	ops_log = fopen("/home/jcyang/logs/tcg_ops.txt", "w+");
+    tcg_dump_ops_f(s, ops_log);
     tcg_liveness_analysis(s);
 
 #ifdef CONFIG_PROFILER

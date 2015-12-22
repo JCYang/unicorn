@@ -2829,6 +2829,7 @@
 #define tcg_current_code_size tcg_current_code_size_arm
 #define tcg_dump_info tcg_dump_info_arm
 #define tcg_dump_ops tcg_dump_ops_arm
+#define tcg_dump_ops_f tcg_dump_ops_f_arm
 #define tcg_exec_all tcg_exec_all_arm
 #define tcg_find_helper tcg_find_helper_arm
 #define tcg_func_start tcg_func_start_arm
